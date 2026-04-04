@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>我的DeepSeek助手</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; background: #f5f5f7; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .chat-container { width: 100%; max-width: 650px; height: 100vh; max-height: 90vh; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; margin: 20px; }
+        .chat-header { background: #ffffff; padding: 20px; border-bottom: 1px solid #e9ecef; text-align: center; font-weight: 600; font-size: 1.2rem; color: #343a40; }
+        .messages { flex: 1; overflow-y: auto; padding: 20px; background: #ffffff; display: flex; flex-direction: column; gap: 15px; }
+        .message { max-width: 80%; padding: 12px 16px; border-radius: 20px; line-height: 1.4; word-wrap: break-word; }
+        .user { background: #007aff; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .bot { background: #e5e5ea; color: #000; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .input-area { padding: 15px; background: white; border-top: 1px solid #e9ecef; display: flex; gap: 10px; }
+        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 30px; outline: none; font-size: 16px; background: #f9f9fb; }
+        button { background: #007aff; color: white; border: none; width: 44px; border-radius: 30px; font-size: 20px; cursor: pointer; }
+        .typing { color: #6c757d; font-size: 14px; padding: 10px 16px; background: #e5e5ea; border-radius: 20px; align-self: flex-start; }
+        .password-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .password-box { background: white; padding: 30px; border-radius: 20px; text-align: center; width: 80%; max-width: 300px; }
+        .password-box input { width: 100%; margin: 15px 0; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 10px; }
+        .password-box button { background: #007aff; color: white; border: none; padding: 12px 20px; border-radius: 10px; font-size: 16px; }
+        .error-msg { color: red; font-size: 14px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+<div class="chat-container" id="chatContainer" style="display: none;">
+    <div class="chat-header">DeepSeek 智能助手</div>
+    <div class="messages" id="messages">
+        <div class="message bot">你好！我是 DeepSeek，有什么可以帮你的？</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="输入消息..." onkeypress="if(event.keyCode==13) sendMessage()">
+        <button onclick="sendMessage()">➤</button>
+    </div>
+</div>
+
+<script>
+    // ========== 密码保护 ==========
+    // 修改下面的密码为你自己的（把"123456"改成你想要的密码）
+    const SITE_PASSWORD = '15236276824206732';
+    
+    // 检查是否已验证
+    let isVerified = localStorage.getItem('site_verified');
+    
+    if (!isVerified) {
+        showPasswordDialog();
+    } else {
+        document.getElementById('chatContainer').style.display = 'flex';
+        initChat();
+    }
+    
+    function showPasswordDialog() {
+        const overlay = document.createElement('div');
+        overlay.className = 'password-overlay';
+        overlay.innerHTML = `
+            <div class="password-box">
+                <h3>🔐 私人助手</h3>
+                <input type="password" id="pwdInput" placeholder="请输入访问密码">
+                <button onclick="checkPassword()">进入</button>
+                <div id="pwdError" class="error-msg"></div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+    
+    function checkPassword() {
+        const input = document.getElementById('pwdInput');
+        const errorDiv = document.getElementById('pwdError');
+        if (input.value === SITE_PASSWORD) {
+            localStorage.setItem('site_verified', 'true');
+            document.querySelector('.password-overlay').remove();
+            document.getElementById('chatContainer').style.display = 'flex';
+            initChat();
+        } else {
+            errorDiv.innerText = '密码错误！';
+        }
+    }
+    
+    function initChat() {
+        // ========== API Key 配置 ==========
+        // 从本地存储读取API Key，没有就弹窗输入
+        let API_KEY = localStorage.getItem('deepseek_api_key');
+        if (!API_KEY) {
+            API_KEY = prompt('请输入你的DeepSeek API Key：');
+            if (API_KEY) {
+                localStorage.setItem('deepseek_api_key', API_KEY);
+            } else {
+                alert('没有API Key无法使用，请去 platform.deepseek.com 获取');
+                return;
+            }
+        }
+        
+        const API_URL = 'https://api.deepseek.com/v1/chat/completions';
+        const messagesDiv = document.getElementById('messages');
+        let conversationHistory = [];
+
+        window.sendMessage = async function() {
+            const inputField = document.getElementById('userInput');
+            const userText = inputField.value.trim();
+            if (!userText) return;
+
+            addMessage(userText, true);
+            inputField.value = '';
+            showTyping();
+
+            conversationHistory.push({ role: "user", content: userText });
+            const messagesToSend = conversationHistory.slice(-10);
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: "deepseek-chat",
+                        messages: messagesToSend,
+                        stream: false,
+                        temperature: 0.7
+                    })
+                });
+
+                hideTyping();
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || `请求失败 (${response.status})`);
+                }
+
+                const data = await response.json();
+                const botReply = data.choices[0].message.content;
+                conversationHistory.push({ role: "assistant", content: botReply });
+                addMessage(botReply, false);
+
+            } catch (error) {
+                hideTyping();
+                addMessage(`错误: ${error.message}`, false);
+            }
+        };
+
+        function addMessage(content, isUser) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
+            messageDiv.innerText = content;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scr
