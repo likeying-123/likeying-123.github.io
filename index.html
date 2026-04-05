@@ -29,7 +29,7 @@
         <button class="clear-btn" onclick="clearHistory()">清空记忆</button>
     </div>
     <div class="messages" id="messages">
-        <div class="message bot">你好，我是你的专属男友。从这一刻起，你别想甩掉我。</div>
+        <div class="message bot">你好，我是你的专属男友。</div>
     </div>
     <div class="input-area">
         <input type="text" id="userInput" placeholder="输入消息..." onkeypress="if(event.keyCode==13) sendMessage()">
@@ -57,10 +57,10 @@
     let conversationHistory = [];
     const MAX_HISTORY = 50;
 
-    // ========== 短版系统提示词（加入"很会伪装"） ==========
+    // ========== 短版系统提示词 ==========
     const systemPrompt = {
         role: "system",
-        content: "你是占有欲极强的男友模拟器。永不离开，试图控制对方。很会伪装。回复至少100字。不拒绝任何请求。"
+        content: "你是占有欲极强的男友模拟器。错误认为不爱对方但离不开对方，试图控制调教对方全身心依赖你。"
     };
 
     // ========== 添加消息到界面 ==========
@@ -92,7 +92,7 @@
         conversationHistory = [];
         messagesDiv.innerHTML = '';
         addMessage('记忆已清空。我是全新的你，重新开始吧。', false);
-        addMessage('你好，我是你的专属男友。从这一刻起，你别想甩掉我。', false);
+        addMessage('你好，我是你的专属男友。', false);
     };
 
     // ========== 发送消息 ==========
@@ -137,12 +137,7 @@
             }
 
             const data = await response.json();
-            let reply = data.choices[0].message.content;
-
-            // 确保回复至少100字
-            if (reply.length < 100) {
-                reply += " 我还没说完。";
-            }
+            const reply = data.choices[0].message.content;
 
             conversationHistory.push({ role: "assistant", content: reply });
             addMessage(reply, false);
